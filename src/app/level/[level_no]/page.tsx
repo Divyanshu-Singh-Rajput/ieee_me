@@ -3,12 +3,12 @@ import Level2 from '@/levels/spot-red-flag/Level2'
 import Level3 from '@/levels/spot-red-flag/Level3'
 import React from 'react'
 
-export default function Page({
+export default async function Page({
     params,
   }: {
-    params: { level_no: string };
+    params: Promise<{ level_no: string }>;
   }) {
-    const no =params.level_no
+    const no = await params.then(p => p.level_no)
     switch(no){
         case "1":
             return <div className='w-screen h-screen'><h1 className='text-4xl font-bold text-white'><Level1/></h1></div>
