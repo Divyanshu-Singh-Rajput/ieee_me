@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect, CSSProperties } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import type { CSSProperties } from "react";
 
 /* ═══════════════════════════════════════════════
     TYPES & INTERFACES
@@ -39,20 +40,19 @@ interface FlashMessage {
 ═══════════════════════════════════════════════ */
 
 const NODES: CyberNode[] = [
+  // attacks - keep top 5 by connection count
   { id: "phishing",   label: "Phishing Attack",    icon: "🎣", type: "attack",   x: 6,   y: 8,   desc: "Deceptive emails/links to steal credentials" },
   { id: "ransomware",  label: "Ransomware",         icon: "🔒", type: "attack",   x: 4,   y: 28,  desc: "Encrypts victim files and demands payment" },
   { id: "ddos",        label: "DDoS Attack",        icon: "💥", type: "attack",   x: 8,   y: 50,  desc: "Floods servers to cause service outage" },
-  { id: "sqli",        label: "SQL Injection",      icon: "💉", type: "attack",   x: 5,   y: 70,  desc: "Malicious SQL queries targeting databases" },
-  { id: "mitm",        label: "Man-in-the-Middle",  icon: "👁", type: "attack",   x: 7,   y: 88,  desc: "Intercepts communication between two parties" },
   { id: "bruteforce",  label: "Brute Force",        icon: "🔨", type: "attack",   x: 22,  y: 18,  desc: "Systematically tries all password combinations" },
   { id: "zerodayx",    label: "Zero-Day Exploit",   icon: "⚡", type: "attack",   x: 20,  y: 62,  desc: "Targets unknown/unpatched vulnerabilities" },
+  // defenses - prune to five matching the remaining attacks
   { id: "mfa",         label: "Multi-Factor Auth",  icon: "🛡", type: "defense",  x: 72,  y: 8,   desc: "Requires multiple verification steps to access" },
   { id: "av_edr",      label: "Antivirus / EDR",    icon: "🦠", type: "defense",  x: 75,  y: 28,  desc: "Detects and removes malicious software" },
   { id: "fw_cdn",      label: "Firewall / CDN",     icon: "🧱", type: "defense",  x: 71,  y: 50,  desc: "Filters traffic and absorbs volumetric attacks" },
-  { id: "waf",         label: "WAF & Input Valid.",  icon: "🔍", type: "defense",  x: 73,  y: 70,  desc: "Sanitizes inputs and blocks injection attempts" },
-  { id: "tls",         label: "TLS/SSL Encryption", icon: "🔐", type: "defense",  x: 74,  y: 88,  desc: "Encrypts data in transit end-to-end" },
   { id: "patch",       label: "Patch Management",   icon: "🩹", type: "defense",  x: 57,  y: 18,  desc: "Keeps software updated to fix known flaws" },
   { id: "pwpolicy",     label: "Password Policy",    icon: "🔑", type: "defense",  x: 60,  y: 62,  desc: "Enforces strong, unique password requirements" },
+  // concepts (already <=5)
   { id: "awareness",   label: "Security Training",   icon: "📚", type: "concept",  x: 40,  y: 12,  desc: "Educating users to recognize threats" },
   { id: "backup",      label: "Backup Strategy",    icon: "💾", type: "concept",  x: 38,  y: 38,  desc: "Regular encrypted offsite data backups" },
   { id: "ids",         label: "IDS / IPS",          icon: "📡", type: "concept",  x: 42,  y: 62,  desc: "Monitors network for suspicious activity" },
@@ -68,10 +68,6 @@ const CORRECT_CONNECTIONS: Connection[] = [
   { from: "ransomware", to: "patch",      lineType: "dotted" },
   { from: "ddos",       to: "fw_cdn",     lineType: "solid"  },
   { from: "ddos",       to: "ids",        lineType: "dotted" },
-  { from: "sqli",       to: "waf",        lineType: "solid"  },
-  { from: "sqli",       to: "fw_cdn",     lineType: "dotted" },
-  { from: "mitm",       to: "tls",        lineType: "solid"  },
-  { from: "mitm",       to: "mfa",        lineType: "dotted" },
   { from: "bruteforce", to: "pwpolicy",   lineType: "solid"  },
   { from: "bruteforce", to: "lockout",    lineType: "solid"  },
   { from: "bruteforce", to: "mfa",        lineType: "dotted" },
@@ -132,16 +128,35 @@ export default function CyberPuzzle() {
     return () => window.removeEventListener("resize", measure);
   }, []);
 
+  // Group nodes by category and define column X positions (percent)
+  const grouped = useMemo(() => {
+    const g: Record<NodeType, CyberNode[]> = {
+      attack: NODES.filter((n) => n.type === "attack"),
+      concept: NODES.filter((n) => n.type === "concept"),
+      defense: NODES.filter((n) => n.type === "defense"),
+    };
+    return g;
+  }, []);
+
+  const columnX: Record<NodeType, number> = { attack: 14, concept: 50, defense: 86 };
+
   useEffect(() => {
     if (drawn.length === TOTAL && !completed) setCompleted(true);
   }, [drawn, completed]);
 
   const nodePos = useCallback(
-    (node: CyberNode) => ({
-      x: (node.x / 100) * boardSize.w,
-      y: (node.y / 100) * boardSize.h,
-    }),
-    [boardSize]
+    (node: CyberNode) => {
+      // Arrange nodes vertically per category for a cleaner, columned layout
+      // Grouping and column X positions are computed in `grouped` below
+      const group = grouped[node.type];
+      const idx = group.findIndex((n) => n.id === node.id);
+      const colPct = columnX[node.type];
+      const x = (colPct / 100) * boardSize.w;
+      // distribute vertically with padding
+      const y = ((idx + 1) / (group.length + 1)) * boardSize.h;
+      return { x, y };
+    },
+    [boardSize, grouped]
   );
 
   const getSVGMouse = useCallback((e: React.MouseEvent | MouseEvent) => {
@@ -228,9 +243,9 @@ export default function CyberPuzzle() {
   const pct = Math.round((score / TOTAL) * 100);
 
   const typeStyle: Record<NodeType, { border: string; bg: string; glow: string; text: string; badge: string }> = {
-    attack: { border: "#ff4060", bg: "rgba(255,64,96,0.12)", glow: "#ff406066", text: "#ff7090", badge: "#ff4060" },
-    defense: { border: "#00e87a", bg: "rgba(0,232,122,0.10)", glow: "#00e87a66", text: "#00e87a", badge: "#00e87a" },
-    concept: { border: "#f5c518", bg: "rgba(245,197,24,0.10)", glow: "#f5c51866", text: "#f5c518", badge: "#f5c518" },
+    attack: { border: "#b23b6b", bg: "rgba(178,59,107,0.08)", glow: "#b23b6b66", text: "#d97aa2", badge: "#b23b6b" },
+    defense: { border: "#3b82f6", bg: "rgba(59,130,246,0.07)", glow: "#3b82f666", text: "#7fb0ff", badge: "#3b82f6" },
+    concept: { border: "#c7952d", bg: "rgba(199,149,45,0.07)", glow: "#c7952d66", text: "#e0c081", badge: "#c7952d" },
   };
 
   return (
@@ -320,10 +335,10 @@ export default function CyberPuzzle() {
               </filter>
             ))}
             <marker id="arr-solid" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
-              <path d="M0,0 L7,3.5 L0,7 Z" fill="#00e87a" opacity="0.8" />
+                <path d="M0,0 L7,3.5 L0,7 Z" fill={typeStyle.defense.badge} opacity="0.9" />
             </marker>
             <marker id="arr-dotted" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
-              <path d="M0,0 L7,3.5 L0,7 Z" fill="#f5c518" opacity="0.8" />
+                <path d="M0,0 L7,3.5 L0,7 Z" fill={typeStyle.concept.badge} opacity="0.9" />
             </marker>
           </defs>
 
@@ -334,8 +349,8 @@ export default function CyberPuzzle() {
               return (
                 <line
                   key={`ghost-${c.from}-${c.to}`}
-                  x1={A.x} y1={A.y} x2={B.x} y2={B.y}
-                  stroke={c.lineType === "solid" ? "#00e87a" : "#f5c518"}
+                      x1={A.x} y1={A.y} x2={B.x} y2={B.y}
+                      stroke={c.lineType === "solid" ? typeStyle.defense.badge : typeStyle.concept.badge}
                   strokeWidth={1.5}
                   strokeDasharray={c.lineType === "dotted" ? "6 4" : "none"}
                   opacity={0.2}
@@ -354,11 +369,11 @@ export default function CyberPuzzle() {
                 <line x1={A.x} y1={A.y} x2={B.x} y2={B.y} stroke="transparent" strokeWidth={18} />
                 <line
                   x1={A.x} y1={A.y} x2={B.x} y2={B.y}
-                  stroke={isSolid ? "#00e87a" : "#f5c518"}
-                  strokeWidth={isSolid ? 2.5 : 2}
+                      stroke={isSolid ? typeStyle.defense.badge : typeStyle.concept.badge}
+                      strokeWidth={isSolid ? 2.5 : 2}
                   strokeDasharray={isSolid ? "none" : "7 5"}
                   opacity={0.85}
-                  filter={`url(#glow-defense)`}
+                      filter={`url(#glow-${isSolid ? "defense" : "concept"})`}
                   markerEnd={isSolid ? "url(#arr-solid)" : "url(#arr-dotted)"}
                 />
                 <circle cx={mx} cy={my} r={6} fill="#0d1117" stroke={isSolid ? "#00e87a" : "#f5c518"} strokeWidth={1.5} opacity={0.9} />
@@ -373,7 +388,7 @@ export default function CyberPuzzle() {
             return (
               <line
                 x1={A.x} y1={A.y} x2={mouse.x} y2={mouse.y}
-                stroke={lineType === "solid" ? "#00e87a" : "#f5c518"}
+                stroke={lineType === "solid" ? typeStyle.defense.badge : typeStyle.concept.badge}
                 strokeWidth={2}
                 strokeDasharray={lineType === "dotted" ? "7 5" : "none"}
                 opacity={0.5}
@@ -458,7 +473,7 @@ function Legend() {
   return (
     <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
       {(["attack", "defense", "concept"] as const).map((type) => {
-        const colors: Record<string, string> = { attack: "#ff4060", defense: "#00e87a", concept: "#f5c518" };
+        const colors: Record<string, string> = { attack: "#b23b6b", defense: "#3b82f6", concept: "#c7952d" };
         return (
           <div key={type} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ width: 10, height: 10, borderRadius: 2, background: colors[type], boxShadow: `0 0 6px ${colors[type]}` }} />
@@ -482,43 +497,43 @@ function Legend() {
 
 const toolBtn = (active: boolean, color: string): CSSProperties => ({
   display: "flex", alignItems: "center", gap: 8,
-  padding: "6px 14px", borderRadius: 4,
+  padding: "6px 14px", borderRadius: 6,
   border: `1.5px solid ${active ? color : color + "44"}`,
-  background: active ? `${color}1a` : "transparent",
+  background: active ? `${color}14` : "transparent",
   color: active ? color : color + "99",
-  fontFamily: "'Courier New', monospace",
-  fontSize: 11, letterSpacing: "0.1em",
+  fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue'",
+  fontSize: 12, letterSpacing: "0.06em",
   cursor: "pointer",
   transition: "all 0.15s",
   whiteSpace: "nowrap",
 });
 
 const styles: Record<string, CSSProperties> = {
-  root: { minHeight: "100vh", background: "#060b12", fontFamily: "'Courier New', monospace", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" },
-  gridBg: { position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, backgroundImage: `linear-gradient(rgba(0,232,122,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(0,232,122,0.025) 1px, transparent 1px)`, backgroundSize: "48px 48px" },
-  vignette: { position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, background: "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.7) 100%)" },
-  header: { position: "relative", zIndex: 10, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 28px 10px", borderBottom: "1px solid #1a2a1a", background: "rgba(6,11,18,0.9)", backdropFilter: "blur(8px)", flexShrink: 0 },
-  headerEyebrow: { fontSize: 9, letterSpacing: "0.35em", color: "#00e87a99", textTransform: "uppercase", marginBottom: 2 },
-  headerTitle: { fontSize: 20, fontWeight: "bold", color: "#e8e8e8", letterSpacing: "0.06em", textShadow: "0 0 30px rgba(0,232,122,0.2)" },
+  root: { minHeight: "100vh", background: "linear-gradient(180deg,#071125 0%, #041025 100%)", fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", color: "#e6eef6" },
+  gridBg: { position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, backgroundImage: `linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)`, backgroundSize: "72px 72px", opacity: 0.06 },
+  vignette: { position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, background: "radial-gradient(ellipse at center, transparent 50%, rgba(2,6,12,0.8) 100%)" },
+  header: { position: "relative", zIndex: 10, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 28px", borderBottom: "1px solid rgba(255,255,255,0.04)", background: "linear-gradient(90deg, rgba(4,10,18,0.6), rgba(6,12,22,0.6))", backdropFilter: "blur(6px)", flexShrink: 0 },
+  headerEyebrow: { fontSize: 10, letterSpacing: "0.35em", color: "#9fb8cc", textTransform: "uppercase", marginBottom: 2 },
+  headerTitle: { fontSize: 20, fontWeight: 700, color: "#f0f6fb", letterSpacing: "0.02em" },
   headerRight: { display: "flex", alignItems: "center", gap: 24 },
   scoreBox: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 },
-  scoreNum: { fontSize: 22, fontWeight: "bold", color: "#00e87a", fontVariantNumeric: "tabular-nums" },
-  scoreBar: { width: 120, height: 4, background: "#1a2a1a", borderRadius: 2, overflow: "hidden" },
-  scoreBarFill: { height: "100%", background: "linear-gradient(90deg, #00e87a, #00ff99)", borderRadius: 2, transition: "width 0.4s ease", boxShadow: "0 0 8px #00e87a" },
-  toolbar: { position: "relative", zIndex: 10, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 28px", background: "rgba(6,11,18,0.8)", borderBottom: "1px solid #111d11", flexShrink: 0, gap: 12 },
+  scoreNum: { fontSize: 22, fontWeight: 700, color: "#3b82f6", fontVariantNumeric: "tabular-nums" },
+  scoreBar: { width: 140, height: 6, background: "rgba(255,255,255,0.03)", borderRadius: 6, overflow: "hidden" },
+  scoreBarFill: { height: "100%", background: "linear-gradient(90deg,#3b82f6,#c7952d)", borderRadius: 6, transition: "width 0.4s ease", boxShadow: "0 0 10px rgba(59,130,246,0.14)" },
+  toolbar: { position: "relative", zIndex: 10, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 28px", background: "transparent", borderBottom: "1px solid rgba(255,255,255,0.03)", flexShrink: 0, gap: 12 },
   toolbarSection: { display: "flex", alignItems: "center", gap: 10 },
-  toolLabel: { fontSize: 10, letterSpacing: "0.2em", color: "#445", marginRight: 4 },
+  toolLabel: { fontSize: 11, letterSpacing: "0.18em", color: "#a3b7c8", marginRight: 6 },
   flash: { position: "fixed", top: 90, left: "50%", transform: "translateX(-50%)", zIndex: 100, border: "1px solid", borderRadius: 6, padding: "10px 24px", fontSize: 13, letterSpacing: "0.05em", backdropFilter: "blur(8px)", animation: "fadeInOut 2.2s ease forwards", whiteSpace: "nowrap" },
-  completeBanner: { position: "fixed", top: 0, left: 0, right: 0, zIndex: 200, background: "linear-gradient(90deg, #003322, #004433, #003322)", borderBottom: "2px solid #00e87a", color: "#00e87a", fontSize: 16, letterSpacing: "0.08em", padding: "12px 28px", display: "flex", alignItems: "center", animation: "slideDown 0.4s ease", boxShadow: "0 4px 30px rgba(0,232,122,0.2)" },
+  completeBanner: { position: "fixed", top: 0, left: 0, right: 0, zIndex: 200, background: "linear-gradient(90deg,#05293a,#063146)", borderBottom: "2px solid rgba(59,130,246,0.14)", color: "#eaf6ff", fontSize: 16, letterSpacing: "0.06em", padding: "12px 28px", display: "flex", alignItems: "center", animation: "slideDown 0.4s ease", boxShadow: "0 6px 36px rgba(3,10,20,0.6)" },
   board: { flex: 1, position: "relative", overflow: "hidden", cursor: "default" },
   svg: { position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "all" },
-  nodeCard: { position: "absolute", width: 138, borderRadius: 7, padding: "10px 12px 9px", backdropFilter: "blur(6px)", transition: "box-shadow 0.15s, border-color 0.15s, background 0.15s", userSelect: "none" },
+  nodeCard: { position: "absolute", width: 170, borderRadius: 10, padding: "12px 14px", backdropFilter: "blur(6px)", transition: "box-shadow 0.15s, border-color 0.15s, background 0.15s, transform 0.12s", userSelect: "none" },
   typeBadge: { display: "inline-block", fontSize: 8, letterSpacing: "0.15em", padding: "1px 5px", borderRadius: 3, border: "1px solid", marginBottom: 6 },
-  nodeIcon: { fontSize: 18, marginBottom: 4, lineHeight: 1 },
-  nodeLabel: { fontSize: 11, fontWeight: "bold", letterSpacing: "0.04em", lineHeight: 1.35 },
+  nodeIcon: { fontSize: 20, marginBottom: 6, lineHeight: 1 },
+  nodeLabel: { fontSize: 13, fontWeight: 700, letterSpacing: "0.02em", lineHeight: 1.25, fontFamily: "Inter, system-ui, -apple-system" },
   connDot: { position: "absolute", top: -7, right: -7, width: 18, height: 18, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: "bold", color: "#000" },
   selRing: { position: "absolute", inset: -5, borderRadius: 10, border: "2px dashed", pointerEvents: "none", animation: "spinRing 3s linear infinite" },
-  tooltip: { position: "absolute", zIndex: 50, background: "rgba(8,14,24,0.97)", border: "1px solid", borderRadius: 6, padding: "10px 14px", maxWidth: 210, pointerEvents: "none", boxShadow: "0 4px 24px rgba(0,0,0,0.6)" },
+  tooltip: { position: "absolute", zIndex: 50, background: "rgba(6,12,22,0.95)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8, padding: "10px 14px", maxWidth: 240, pointerEvents: "none", boxShadow: "0 8px 34px rgba(2,6,12,0.6)" },
   footer: { position: "relative", zIndex: 10, padding: "8px 28px", borderTop: "1px solid #111d11", fontSize: 11, color: "#444", letterSpacing: "0.08em", background: "rgba(6,11,18,0.9)", flexShrink: 0 },
 };
 

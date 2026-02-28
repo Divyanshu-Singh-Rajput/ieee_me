@@ -9,7 +9,7 @@ export default async function Page({
   params: Promise<{ id: string }> 
 }) {
   const { id } = await params;
-  const levelId = parseInt(id);
+  const levelId = parseInt(id)-1;
 
   const level = LEVEL_DATA[levelId];
 const user_id = await auth().then(session => session?.user.id);

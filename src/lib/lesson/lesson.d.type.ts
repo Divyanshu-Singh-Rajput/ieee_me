@@ -1,7 +1,7 @@
 
 type Step = {
     id: number;
-    type: 'intro' | 'comparison' | 'quiz';
+    type: 'intro' | 'comparison' | 'quiz'| 'concept';
     title: string;
     description: string;
     illustration?: string;
