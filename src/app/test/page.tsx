@@ -1,13 +1,14 @@
 "use client"
 import PhishingSandbox from '@/components/PhishingSandbox'
 import Chapter from '@/harsh/chapter'
+import Cyber_surfer from '@/harsh/cyber_surfer'
 import CyberPuzzle from '@/harsh/CyberPuzzle'
 import React from 'react'
 
 const Page = () => {
   return (
-    <div>
-    <CyberPuzzle/>
+    <div  className='ml-20'>
+    <Cyber_surfer/>
     
     </div>
   )
