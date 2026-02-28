@@ -1,5 +1,6 @@
 "use client"
 import PhishingSandbox from '@/components/PhishingSandbox'
+import SquidGame from '@/components/SquidGame'
 import Chapter from '@/harsh/chapter'
 import CyberPuzzle from '@/harsh/CyberPuzzle'
 import React from 'react'
@@ -7,7 +8,7 @@ import React from 'react'
 const Page = () => {
   return (
     <div>
-    <CyberPuzzle/>
+    <SquidGame/>
     
     </div>
   )
